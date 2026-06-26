@@ -11,4 +11,4 @@ export const alovaInstance = createAlova({
   responded: (response) => response.json()
 });
 
-export const getCharacters = () => alovaInstance.Get('/character');
+export const getCharacters = () => alovaInstance.Get('/characteres');
