@@ -1,0 +1,97 @@
+name: CI/CD Pipeline
+
+# Disparadores: cada push o PR a main ejecuta el pipeline.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: # permite ejecutarlo manualmente desde la pestaña Actions
+
+# Evita que se acumulen ejecuciones viejas corriendo a la vez para la misma rama
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------
+  # JOB 1: Compilación + pruebas automáticas + empaquetado del artefacto
+  # ---------------------------------------------------------------
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Descargar el código del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Linter (calidad de código)
+        run: npm run lint
+
+      - name: Ejecutar pruebas automáticas
+        run: npm run test
+
+      - name: Compilar la aplicación (build de producción)
+        run: npm run build
+
+      - name: Empaquetar artefacto de despliegue
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-dist
+          path: dist/
+          retention-days: 5
+
+  # ---------------------------------------------------------------
+  # JOB 2: Simulación del despliegue a un entorno de staging
+  # Solo se ejecuta si el job anterior fue exitoso y estamos en main
+  # ---------------------------------------------------------------
+  deploy-staging:
+    name: Deploy to Staging (simulado)
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging.cicd-demo.example.com
+
+    steps:
+      - name: Descargar el artefacto generado por el job anterior
+        uses: actions/download-artifact@v4
+        with:
+          name: app-dist
+          path: dist/
+
+      - name: Verificar contenido del artefacto
+        run: |
+          echo "Archivos a desplegar:"
+          ls -R dist/
+
+      - name: Simular despliegue a staging
+        run: |
+          echo "Conectando al servidor de staging..."
+          sleep 2
+          echo "Sincronizando artefacto (dist/) con el servidor remoto..."
+          sleep 2
+          echo "Reiniciando servicio de la aplicación en staging..."
+          sleep 1
+          echo "Despliegue simulado completado correctamente."
+          echo "URL de staging: https://staging.cicd-demo.example.com"
+
+      - name: Resumen del despliegue
+        run: |
+          {
+            echo "## Resultado del despliegue a Staging"
+            echo "- **Commit:** ${{ github.sha }}"
+            echo "- **Rama:** ${{ github.ref_name }}"
+            echo "- **Fecha:** $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            echo "- **Estado:** ✅ Simulado con éxito"
+          } >> "$GITHUB_STEP_SUMMARY"
